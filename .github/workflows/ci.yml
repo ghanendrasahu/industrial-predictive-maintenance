@@ -38,7 +38,7 @@ jobs:
       - name: Run test suite (offline, seeded)
         run: python -m pytest tests -q
 
-      - name: End-to-end smoke: simulate -> train -> score
+      - name: End-to-end smoke - simulate, train, score
         run: |
           python src/simulator.py --machines 4 --cycles 400 --out data/telemetry.csv
           python src/train.py --data data/telemetry.csv
