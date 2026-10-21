@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.4.10
+
+      - name: Lint
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies (exact pins)
+        run: pip install -r requirements-dev.txt
+
+      - name: Run test suite (offline, seeded)
+        run: python -m pytest tests -q
+
+      - name: End-to-end smoke: simulate -> train -> score
+        run: |
+          python src/simulator.py --machines 4 --cycles 400 --out data/telemetry.csv
+          python src/train.py --data data/telemetry.csv
+          python scripts/demo.py
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hardened image (two-stage, non-root, no compiler)
+        run: docker build -t predictive-maintenance:ci .
+
+      - name: Assert image has no compiler toolchain
+        run: |
+          if docker run --rm --entrypoint sh predictive-maintenance:ci -c "command -v gcc"; then
+            echo "ERROR: gcc present in runtime image"; exit 1
+          fi
+          echo "runtime image is clean (no gcc)"
+
+      - name: Verify non-root + /health
+        run: |
+          docker run -d --name probe -p 8000:8000 predictive-maintenance:ci
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health || true)
+            if [ "$code" = "200" ]; then
+              echo "health OK, container user: $(docker exec probe whoami)"
+              docker rm -f probe
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "health never went green"
+          docker logs probe
+          docker rm -f probe
+          exit 1

@@ -1,0 +1,22 @@
+# Secrets / local state - never into image layers
+.env
+*.db
+*.sqlite3
+
+# Environments & caches
+venv/
+.venv/
+.venv-test/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.py[cod]
+.vscode/
+.idea/
+
+# Generated telemetry & model artifacts are mounted volumes, never baked layers
+data/telemetry.csv
+models/

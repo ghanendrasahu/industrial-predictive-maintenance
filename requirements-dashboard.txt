@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Dashboard (streamlit) is deployed separately from the API.
+streamlit==1.41.1

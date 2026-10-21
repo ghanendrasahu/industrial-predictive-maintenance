@@ -1,0 +1,22 @@
+# macOS junk
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-test/
+venv/
+
+# Env & secrets
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated telemetry & trained artifacts (rebuild with the CLIs)
+data/telemetry.csv
+models/
