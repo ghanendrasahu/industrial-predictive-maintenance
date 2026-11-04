@@ -96,7 +96,8 @@ def _indicators(raw: pd.DataFrame, bundle: dict[str, Any]) -> list[dict[str, Any
 def _recommended_action(band: str, indicators: list[dict[str, Any]]) -> str:
     abnormal = [item for item in indicators if item["anomalous"]]
     drivers = ", ".join(
-        f"{item['sensor']} ({item['direction']} {abs(item['sigma']):.1f} sigma)" for item in abnormal[:3]
+        f"{item['sensor']} ({item['direction']} {abs(item['sigma']):.1f} sigma)"
+        for item in abnormal[:3]
     )
     if band == "CRITICAL":
         base = "Schedule emergency inspection within 24 hours."
@@ -109,7 +110,9 @@ def _recommended_action(band: str, indicators: list[dict[str, Any]]) -> str:
     return base
 
 
-def assess_machine(raw: pd.DataFrame, machine_id: str, bundle: dict[str, Any]) -> dict[str, Any]:
+def assess_machine(
+    raw: pd.DataFrame, machine_id: str, bundle: dict[str, Any]
+) -> dict[str, Any]:
     """Score one machine's most recent state."""
     subset = raw[raw["machine_id"] == machine_id]
     if subset.empty:
@@ -125,7 +128,13 @@ def assess_machine(raw: pd.DataFrame, machine_id: str, bundle: dict[str, Any]) -
     latest = frame.iloc[[-1]]
     X = latest[bundle["features"]]
 
-    probability = float(bundle["failure"].predict_proba(X)[0][1])
+    # Degenerate training data can leave a one-class classifier, whose
+    # ``predict_proba`` has a single column. Read the positive class by name
+    # instead of assuming ``[0][1]`` exists.
+    failure_model = bundle["failure"]
+    probabilities = failure_model.predict_proba(X)[0]
+    classes = list(getattr(failure_model, "classes_", [0, 1]))
+    probability = float(probabilities[classes.index(1)]) if 1 in classes else 0.0
     rul_cycles = max(float(bundle["rul"].predict(X)[0]), 0.0)
     rul_hours = rul_cycles * CYCLE_HOURS
     anomaly_score = float(-bundle["anomaly"].score_samples(X)[0])
@@ -154,12 +163,17 @@ def assess_machine(raw: pd.DataFrame, machine_id: str, bundle: dict[str, Any]) -
 
 def assess_all(raw: pd.DataFrame, bundle: dict[str, Any]) -> list[dict[str, Any]]:
     """Score every machine present in the telemetry."""
-    return [assess_machine(raw, machine_id, bundle) for machine_id in sorted(raw["machine_id"].unique())]
+    return [
+        assess_machine(raw, machine_id, bundle)
+        for machine_id in sorted(raw["machine_id"].unique())
+    ]
 
 
 def rank_machines(assessments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Order assessments by urgency (highest failure probability first)."""
-    return sorted(assessments, key=lambda item: item["failure_probability"], reverse=True)
+    return sorted(
+        assessments, key=lambda item: item["failure_probability"], reverse=True
+    )
 
 
 def to_json(assessment: dict[str, Any]) -> str:

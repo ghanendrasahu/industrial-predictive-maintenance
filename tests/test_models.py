@@ -40,7 +40,10 @@ def test_indicators_are_ranked_by_deviation(trained, fleet_frame):
     result = assess_machine(fleet_frame, "M-01", trained["bundle"])
     sigmas = [abs(item["sigma"]) for item in result["all_indicators"]]
     assert sigmas == sorted(sigmas, reverse=True)
-    assert all(item["direction"] in {"up", "down", "stable"} for item in result["all_indicators"])
+    assert all(
+        item["direction"] in {"up", "down", "stable"}
+        for item in result["all_indicators"]
+    )
 
 
 def test_failing_machine_scores_worse_than_healthy_one(trained, fleet_frame):
@@ -72,3 +75,20 @@ def test_machine_with_too_little_history_is_rejected(trained, fleet_frame):
     truncated = fleet_frame[fleet_frame["cycle"] <= 3]
     with pytest.raises(ValueError):
         assess_machine(truncated, "M-01", trained["bundle"])
+
+
+def test_single_class_failure_model_does_not_crash(trained, fleet_frame):
+    # A one-class target makes sklearn return one probability column; the
+    # assessment must report the prior instead of raising IndexError.
+    from sklearn.dummy import DummyClassifier
+
+    from src.features import build_window_features
+
+    subset = fleet_frame[fleet_frame["machine_id"] == "M-01"]
+    frame = build_window_features(subset, window=8, horizon=6)
+    X = frame[trained["bundle"]["features"]]
+    degenerate = dict(trained["bundle"])
+    degenerate["failure"] = DummyClassifier(strategy="prior").fit(X, [0] * len(X))
+
+    result = assess_machine(subset, "M-01", degenerate)
+    assert result["failure_probability"] == 0.0
